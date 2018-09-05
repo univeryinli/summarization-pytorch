@@ -2,7 +2,7 @@ import json
 import nltk
 import nltk.data
 from nltk.tokenize import RegexpTokenizer
-from compiler.ast import flatten
+#from compiler.ast import flatten
 import sys,os
 from gensim import corpora, models, similarities
 
