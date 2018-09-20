@@ -134,7 +134,8 @@ def cal_tfidf(path_base, title_contents, contents, titles):
     corpora.MmCorpus.serialize(path_base + 'bytecup_tfidf_title.mm', corpus_tfidf_title)
     print('cal_tfidf:done!')
 
-path_base = '../data/'
+
+path_base = '../data_sample/'
 path_source = path_base + 'corpus.txt'
 path_train = path_base + 'train.data'
 path_label = path_base + 'label.data'
@@ -144,15 +145,15 @@ stoplist = ('\ , .  ( ) - ? / ! : ; !. [ ] + = _ " * ^ % #'.split())
 stoplist = stopwords.words() + stoplist+["'"]
 
 # generate content and save file
-contents, titles, title_contents = word2tokens(path_source, stoplist)
-list_save(contents, path_train)
-list_save(titles, path_label)
-list_save(title_contents, path_title_con)
-fl = open(path_base + 'content.pickle', 'wb')
-pickle.dump(contents, fl,protocol=True)
-pickle.dump(titles, fl,protocol=True)
-pickle.dump(title_contents, fl,protocol=True)
-fl.close()
+#contents, titles, title_contents = word2tokens(path_source, stoplist)
+#list_save(contents, path_train)
+#list_save(titles, path_label)
+#list_save(title_contents, path_title_con)
+#fl = open(path_base + 'content.pickle', 'wb')
+#pickle.dump(contents, fl,protocol=True)
+#pickle.dump(titles, fl,protocol=True)
+#pickle.dump(title_contents, fl,protocol=True)
+#fl.close()
 
 # generate and save model
 path_model = path_base + 'title_content.models'
