@@ -1,5 +1,6 @@
 import pickle, os,json
 import numpy as np
+from utils import utils
 
 
 class MyEncoder(json.JSONEncoder):
@@ -14,20 +15,66 @@ class MyEncoder(json.JSONEncoder):
             return super(MyEncoder, self).default(obj)
 
 
-class utils:
-    def save(obj, path):
+class MyMath:
+    def cos_len(self,a, b):
+        lena = np.sqrt(a.dot(a))
+        lenb = np.sqrt(b.dot(b))
+        coslen = a.dot(b) / (lena * lenb)
+        angel = np.arccos(coslen)
+        angel = angel * 360 / 2 / np.pi
+        return angel
+
+
+class FileIO:
+    def save2pickle(obj, path):
         if os.path.exists(path):
             os.remove(path)
             print('the file is exists!')
-            file = open(path, 'wb')
-            pickle.dump(obj, file, protocol=True)
-            file.close()
-            print('your file has been saved!')
+        file = open(path, 'wb')
+        pickle.dump(obj, file, protocol=True)
+        file.close()
+        print('your file has been saved!')
 
-    def load(path):
+    def load_from_pickle(self,path):
         if os.path.exists(path):
             file = open(path, 'rb')
-            return pickle.load(file)
-            print('your file has been readed!')
+            data=pickle.load(file)
+            file.close()
+            print('your file has been read!')
+            return data
         else:
             print('the file is not exists!')
+
+    def list_read(self,path,is_flatten=False,is_return=False):
+        # Try to read a txt file and return a list.Return [] if there was a
+        # mistake.
+        try:
+            file = open(path, 'r')
+        except IOError:
+            error = []
+            return error
+        print('list read:' + path + 'start!')
+        file_lines=open(path+'dd','a')
+        lines=[]
+        for line in file:
+            if is_flatten:
+                line = flatten(eval(line))
+            else:
+                line = eval(line)
+            if is_return:
+                lines.append(line)
+            else:
+                file_lines.write(line)
+        file_lines.close()
+        file.close()
+        print('list read:' + path + 'done!')
+        return lines
+
+    def list_write(self,content, path):
+        # Try to save a list variable in txt file.
+        print('listsave:' + path + 'start!')
+        file = open(path, 'a')
+        for i in range(len(content)):
+            file.write(str(content[i]) + '\n')
+        file.close()
+        print('list save:' + path + 'done!')
