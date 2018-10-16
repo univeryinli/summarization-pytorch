@@ -3,17 +3,18 @@ import nltk.data
 from nltk.tokenize import RegexpTokenizer, WordPunctTokenizer
 from nltk.corpus import stopwords
 from compiler.ast import flatten
-import sys, os, json, pickle, multiprocessing
+import sys, os, json, pickle, multiprocessing,unidecode
 import numpy as np
 
 from gensim import corpora, models, similarities
 from gensim.models import Word2Vec
 from multiprocessing import Pool
 import os, time, random, gc
+from utils import FileIO
 
 
 class WordProcess:
-    def __init__(self, path_base, isModelLoad=False):
+    def __init__(self, path_base, is_model_load=False):
         self.path_base = path_base
         path_model = path_base + 'title_content.models'
         self.path_model = path_model
@@ -26,7 +27,7 @@ class WordProcess:
         self.vector = []
         self.vectors = []
 
-        if isModelLoad:
+        if is_model_load:
             print('model load started!')
             model = Word2Vec.load(self.path_model)
             self.wv = model.wv
@@ -74,7 +75,7 @@ class WordProcess:
         #    words=toker.tokenize(sentence)
         return words
 
-    def word2tokens(self, path, stop_list, is_return=False):
+    def text2tokens1(self, path, stop_list, is_return=False):
         stop_list_new = stopwords.words() + stop_list + ["'"]
         file = open(path)
         file_contents = open(path[0:-3] + 'contents.txt', 'a')
@@ -111,6 +112,46 @@ class WordProcess:
                 file_contents.write(str(content))
                 file_titles.write(title)
                 file_title_content.write(title_content)
+        file_title_content.close()
+        file_titles.close()
+        file_contents.close()
+        file.close()
+        if is_return:
+            return contents, titles, title_contents
+
+    def text2tokens2(self, path, stop_list, is_return=False):
+#       stop_list_new = stopwords.words() + stop_list + ["'"]
+        stop_list_new= stop_list + ["'"]
+        print(stop_list_new)
+        file = open(path)
+        file_contents = open(path[0:-3] + 'contents.txt', 'a')
+        file_titles = open(path[0:-3] + 'titles.txt', 'a')
+        file_title_content = open(path[0:-3] + 'title_contents.txt', 'a')
+        contents = []
+        titles = []
+        title_contents = []
+        for line in file:
+            line = json.loads(line)
+            ids = line['id']
+            print(ids)
+            content = line['content'].lower()
+            content = unidecode.unidecode(content)
+            content=content.replace('-',' ').replace(')',' ').replace('(',' ').replace(',',' ').replace('"',' ').replace("'",' ')
+            paras = content.split('\n')
+            content = [[word for sentence in self.split_sentence(para) for word in self.word_tokenizer(sentence) if word not in stop_list_new] for para in paras]
+            sentences = flatten(content)
+            title = line['title']
+            title = title.lower()
+            title = self.word_tokenizer(title)
+            title_content = sentences + title
+            if is_return:
+                contents.append(content)
+                titles.append(title)
+                title_contents.append(title_content)
+            else:
+                file_contents.write(str(content)+'\n')
+                file_titles.write(str(title)+'\n')
+                file_title_content.write(str(title_content)+'\n')
         file_title_content.close()
         file_titles.close()
         file_contents.close()
@@ -203,9 +244,66 @@ class WordProcess:
         corpora.MmCorpus.serialize(path_base + 'bytecup_tfidf_title.mm', corpus_tfidf_title)
         print('cal_tfidf:done!')
 
+    def list_read(self,path,is_flatten=False,is_return=False):
+        # Try to read a txt file and return a list.Return [] if there was a
+        # mistake.
+        try:
+            file = open(path, 'r')
+        except IOError:
+            error = []
+            return error
+        print('list read:' + path + 'start!')
+        file_lines=open(path+'dd','a')
+        lines=[]
+        for line in file:
+            if is_flatten:
+                line = flatten(eval(line))
+            else:
+                line = eval(line)
+            if is_return:
+                lines.append(line)
+            else:
+                file_lines.write(line)
+        file_lines.close()
+        file.close()
+        print('list read:' + path + 'done!')
+        if is_return:
+            return lines
+
+    def word_generator(self,path,is_flatten=False):
+        file = open(path, 'r')
+        print('generator read:' + path + 'start!')
+        for line in file:
+            if is_flatten:
+                line = flatten(eval(line))
+            else:
+                line = eval(line)
+            yield line
+        file.close()
+        print('generator:' + path + 'done!')
+
+
+class MySentences(object):
+    def __init__(self, path):
+        self.path = path
+
+    def __iter__(self):
+        i=0
+        for line in open(self.path,'r'):
+            i=i+1
+            print(i)
+            yield line
+
 
 if __name__ == '__main__':
-    path_base = '../data/'
-    word_pro = WordProcess(path_base, isModelLoad=True)
-    word_pro.train_vec_manager('train_1/')
-    word_pro.label_vec_manager('label_1/')
+    path_base = '../data1/'
+    text_path=path_base + 'bytecup.corpus.train.0.txt'
+    stoplist = ('\ , .  - ? / ! : ; !. [ ] + = _ " * ^ % # @ & ` ( ) { } -- --- ... ),'.split())
+    word_pro = WordProcess(path_base, isModelLoad=False)
+#    word_pro.text2tokens2(text_path,stoplist)
+#    title_contents = MySentences(text_path[0:-3]+'title_contents.txt')
+    title_contents=word_pro.list_read(text_path[0:-3]+'title_contents.txt',is_return=True)
+    word_pro.model_gen(title_contents)
+
+#    word_pro.train_vec_manager('train_1/')
+#    word_pro.label_vec_manager('label_1/')

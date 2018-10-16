@@ -56,8 +56,11 @@ class LossHistory(keras.callbacks.Callback):
         if os.path.exists(path):
             file = open(path, 'r')
             dict1=json.load(file)
+            self.losses=dict1['losses']
+            self.accuracy=dict1['accuracy']
+            self.val_loss=dict1['val_loss']
+            self.val_acc=dict1['val_acc']
             print('your file has been read!')
-            return dict1
         else:
             print('the file is not exists!')
 
@@ -77,7 +80,7 @@ class LossHistory(keras.callbacks.Callback):
         plt.xlabel(loss_type)
         plt.ylabel('acc-loss')
         plt.legend(loc="upper right")
-        plt.savefig(str(loss_type)+'.jpg')
+        plt.savefig(str(loss_type)+'.png')
 #        plt.show()
 
 

@@ -1,6 +1,6 @@
 import pickle, os,json
 import numpy as np
-from utils import utils
+from compiler.ast import flatten
 
 
 class MyEncoder(json.JSONEncoder):
@@ -68,7 +68,8 @@ class FileIO:
         file_lines.close()
         file.close()
         print('list read:' + path + 'done!')
-        return lines
+        if is_return:
+            return lines
 
     def list_write(self,content, path):
         # Try to save a list variable in txt file.

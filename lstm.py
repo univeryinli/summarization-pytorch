@@ -9,7 +9,7 @@ from keras.utils import multi_gpu_model
 import pickle,os
 from compiler.ast import flatten
 #from parallel_model import ParallelModel
-from lossHistory import LossHistory
+from loss_history import LossHistory
 from multiprocessing import Pool
 data_dim = 128
 import gc,random
@@ -54,6 +54,7 @@ def get_model(timesteps, data_dim,output_dim):
     lstm3_2 = LSTM(256, return_sequences=True)(lstm3_1)
     lstm3_3 = LSTM(256)(lstm3_2)
 
+
     dense0 = concatenate([lstm1_3, lstm2_3, lstm3_3])
     dense1 = Dense(768, activation='relu')(dense0)
     dense2 = Dense(1024, activation='relu')(dense1)
@@ -64,7 +65,7 @@ def get_model(timesteps, data_dim,output_dim):
     model1 = Model(inputs=inputs, outputs=outputs)
     sgd = optimizers.SGD()
     model1 = multi_gpu_model(model1, 2)
-    model1.compile(optimizer=sgd, loss='mse', metrics=['mae','cosine'])
+    model1.compile(optimizer=sgd, loss='cosine', metrics=['mse'])
     return model1
 
 '''
