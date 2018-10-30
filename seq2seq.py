@@ -76,7 +76,7 @@ def get_model(max_encoder_seq_length,max_decoder_seq_length,num_encoder_tokens,l
     decoder_output1, _, _ = LSTM(latent_dim, return_sequences=True, return_state=True)(decoder_inputs,initial_state=encoder_states)
     decoder_output2, _, _ = LSTM(latent_dim, return_sequences=True,return_state=True)(decoder_output1,initial_state=encoder_states2)
     decoder_output3, _, _ = LSTM(latent_dim,return_sequences=True,return_state=True)(decoder_output2,initial_state= encoder_states1)
-    decoder_output3= Dense(num_encoder_tokens)(decoder_output3)(decoder_output3)
+    decoder_output3= Dense(num_encoder_tokens)(decoder_output3)
     decoder_outputs=advanced_activations.LeakyReLU(alpha=0.3)(decoder_output3)
     # Define the model that will turn
     # `encoder_input_data` & `decoder_input_data` into `decoder_target_data`

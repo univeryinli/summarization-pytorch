@@ -48,6 +48,7 @@ class DataGenerator(keras.utils.Sequence):
 #        y = np.empty((self.batch_size), dtype=int)
 
         # this is used for regression model
+
         encoder_input_data = np.zeros(
             (self.batch_size, self.train_dim, self.n_channels),
             dtype='float32')
@@ -67,6 +68,7 @@ class DataGenerator(keras.utils.Sequence):
             title = ['\t'] + title + ['\n']
             content_len=min(self.train_dim,len(content))
             title_len=len(title)
+
             content_vec = self.wv[content[0:content_len]]
             title_vec = self.wv[title]
             encoder_input_data[i, 0:content_len] = content_vec

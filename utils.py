@@ -1,6 +1,6 @@
 import pickle, os,json
 import numpy as np
-from compiler.ast import flatten
+from iteration_utilities import flatten
 
 
 class MyEncoder(json.JSONEncoder):
@@ -79,3 +79,18 @@ class FileIO:
             file.write(str(content[i]) + '\n')
         file.close()
         print('list save:' + path + 'done!')
+
+    def load_from_json(self,path):
+        print('json file load start!')
+        contents=[]
+        titles=[]
+        file = open(path, 'r')
+        for line in file:
+            line=json.loads(line)
+            content=line['content']
+            content=list(flatten(content))
+            contents.append(content)
+            title=line['title']
+            titles.append(title)
+        file.close()
+        return contents,titles

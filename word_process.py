@@ -2,14 +2,14 @@ import nltk
 import nltk.data
 from nltk.tokenize import RegexpTokenizer, WordPunctTokenizer
 from nltk.corpus import stopwords
-from compiler.ast import flatten
+from iteration_utilities import flatten
 import sys, os, json, pickle, multiprocessing,unidecode
 import numpy as np
 
 from gensim import corpora, models, similarities
 from gensim.models import Word2Vec
 from multiprocessing import Pool
-import os, time, random, gc
+import os, time, random, gc,re
 from utils import FileIO
 
 
@@ -22,6 +22,10 @@ class WordProcess:
         self.path_train = path_train
         path_label = path_base + 'label_1/'
         self.path_label = path_label
+        self.re_sentence=re.compile(r'[\\\,\-\?\/\!\:\;\!\.\[\]\+\=\_\"\*\^\%\#\@\&\`\(\)\{\}\']+')
+        self.re_num=re.compile(r'([0-9]+)')
+        self.re_char=re.compile(r'[0-9]+')
+        self.re_upper=re.compile(r'([A-Z][a-z]+)')
         self.content = []
         self.contents = []
         self.vector = []
@@ -64,17 +68,6 @@ class WordProcess:
                     self.title2vectors(filename)
         print('label path manager done')
 
-    def split_sentence(self, paragraph):
-        tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
-        sentences = tokenizer.tokenize(paragraph)
-        return sentences
-
-    def word_tokenizer(self, sentence):
-        #    toker = RegexpTokenizer(r'((?<=[^\w\s])\w(?=[^\w\s])|(\W))+', gaps=True)
-        words = WordPunctTokenizer().tokenize(sentence)
-        #    words=toker.tokenize(sentence)
-        return words
-
     def text2tokens1(self, path, stop_list, is_return=False):
         stop_list_new = stopwords.words() + stop_list + ["'"]
         file = open(path)
@@ -99,6 +92,8 @@ class WordProcess:
                  self.split_sentence(para)]
                 for
                 para in paras]
+            content = [[word for sentence in self.split_sentence(para) for word in self.word_tokenizer(sentence) if
+                        word not in stop_list_new] for para in paras]
             sentences = flatten(content)
             title = line['title']
             title = title.lower()
@@ -119,42 +114,62 @@ class WordProcess:
         if is_return:
             return contents, titles, title_contents
 
-    def text2tokens2(self, path, stop_list, is_return=False):
-#       stop_list_new = stopwords.words() + stop_list + ["'"]
-        stop_list_new= stop_list + ["'"]
-        print(stop_list_new)
+    def text2tokens2(self, path,is_return=False):
         file = open(path)
-        file_contents = open(path[0:-3] + 'contents.txt', 'a')
-        file_titles = open(path[0:-3] + 'titles.txt', 'a')
-        file_title_content = open(path[0:-3] + 'title_contents.txt', 'a')
+        file_new = open(path[0:-3] + 'new.txt', 'a')
+        file_dic = open(path[0:-3] + 'dic.txt', 'a')
+        file_title_contents = open(path[0:-3] + 'title_contents.txt', 'a')
         contents = []
         titles = []
         title_contents = []
-        for line in file:
-            line = json.loads(line)
-            ids = line['id']
-            print(ids)
-            content = line['content'].lower()
+        dic=['unt','\n','\t','SOS']
+        for i,line in enumerate(file):
+            content_new = {}
+            text = json.loads(line)
+            id = text['id']
+            print(id)
+
+            content = text['content']
             content = unidecode.unidecode(content)
-            content=content.replace('-',' ').replace(')',' ').replace('(',' ').replace(',',' ').replace('"',' ').replace("'",' ')
-            paras = content.split('\n')
-            content = [[word for sentence in self.split_sentence(para) for word in self.word_tokenizer(sentence) if word not in stop_list_new] for para in paras]
-            sentences = flatten(content)
-            title = line['title']
-            title = title.lower()
-            title = self.word_tokenizer(title)
-            title_content = sentences + title
+            sentences = nltk.sent_tokenize(content)
+
+            title = text['title']
+            title = unidecode.unidecode(title)
+            title = self.re_sentence.sub(' ', title).lower()
+            title = nltk.word_tokenize(title)
+
+            sentences_temp = []
+            dic_temp=[]
+            for j, sentence in enumerate(sentences):
+                sentence = self.re_sentence.sub(' ', sentence)
+                words = nltk.word_tokenize(sentence)
+                words = [upper.lower() for word in words for char in self.re_num.split(word) if char is not '' for upper in
+                         self.re_upper.split(char) if upper is not '']
+                # re.match(r'[0-9]+[a-z]+', '2017at')
+                sentences_temp.append(words)
+                dic_temp += words
+            title_content=dic_temp + title
+            dic += list(set(title_content))
+
+            # words = nltk.WordPunctTokenizer().tokenize('. How to Know If You ve Sent a Bad Twee.tA deep dive into    The Ratio ????')
+            # print(words)
+
             if is_return:
-                contents.append(content)
+                contents.append(sentences_temp)
                 titles.append(title)
                 title_contents.append(title_content)
             else:
-                file_contents.write(str(content)+'\n')
-                file_titles.write(str(title)+'\n')
-                file_title_content.write(str(title_content)+'\n')
-        file_title_content.close()
-        file_titles.close()
-        file_contents.close()
+                content_new['content']=sentences_temp
+                content_new['title']=title
+                content_new['id']=id
+                content_new=json.dumps(content_new)
+                file_new.write(content_new+'\n')
+                file_title_contents.write(str(title_content)+'\n')
+        file_title_contents.write(str(['unt','\n','\t','SOS']) + '\n')
+        file_dic.write(str(list(set(dic)))+'\n')
+        file_title_contents.close()
+        file_new.close()
+        file_dic.close()
         file.close()
         if is_return:
             return contents, titles, title_contents
@@ -224,7 +239,7 @@ class WordProcess:
 
     def model_gen(self, title_content):
         print('model_gen start!')
-        model = Word2Vec(title_content, size=128, window=5, min_count=1, workers=100)
+        model = Word2Vec(title_content, size=256, window=5, min_count=1, workers=15)
         model.save(self.path_model)
         print('model_gen:done')
 
@@ -283,25 +298,11 @@ class WordProcess:
         print('generator:' + path + 'done!')
 
 
-class MySentences(object):
-    def __init__(self, path):
-        self.path = path
-
-    def __iter__(self):
-        i=0
-        for line in open(self.path,'r'):
-            i=i+1
-            print(i)
-            yield line
-
-
 if __name__ == '__main__':
-    path_base = '../data1/'
+    path_base = '../data/'
     text_path=path_base + 'bytecup.corpus.train.0.txt'
-    stoplist = ('\ , .  - ? / ! : ; !. [ ] + = _ " * ^ % # @ & ` ( ) { } -- --- ... ),'.split())
-    word_pro = WordProcess(path_base, isModelLoad=False)
-#    word_pro.text2tokens2(text_path,stoplist)
-#    title_contents = MySentences(text_path[0:-3]+'title_contents.txt')
+    word_pro = WordProcess(path_base,is_model_load=True)
+    #word_pro.text2tokens2(text_path)
     title_contents=word_pro.list_read(text_path[0:-3]+'title_contents.txt',is_return=True)
     word_pro.model_gen(title_contents)
 
