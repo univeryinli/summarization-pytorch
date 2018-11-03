@@ -6,6 +6,10 @@ from iteration_utilities import flatten
 import sys, os, json, pickle, multiprocessing,unidecode
 import numpy as np
 
+if os.name=='nt':
+    import warnings
+    warnings.filterwarnings(action='ignore', category=UserWarning, module='gensim')
+
 from gensim import corpora, models, similarities
 from gensim.models import Word2Vec
 from multiprocessing import Pool
@@ -297,14 +301,21 @@ class WordProcess:
         file.close()
         print('generator:' + path + 'done!')
 
+    def vec2word(self,vec):
+        vec=np.array(vec)
+        word_t=[]
+        for v in vec:
+            word_t.append(self.wv.similar_by_vector(v)[0])
+        return word_t
+
 
 if __name__ == '__main__':
     path_base = '../data/'
     text_path=path_base + 'bytecup.corpus.train.0.txt'
     word_pro = WordProcess(path_base,is_model_load=True)
     #word_pro.text2tokens2(text_path)
-    title_contents=word_pro.list_read(text_path[0:-3]+'title_contents.txt',is_return=True)
-    word_pro.model_gen(title_contents)
+    #title_contents=word_pro.list_read(text_path[0:-3]+'title_contents.txt',is_return=True)
+    #word_pro.model_gen(title_contents)
 
 #    word_pro.train_vec_manager('train_1/')
 #    word_pro.label_vec_manager('label_1/')
