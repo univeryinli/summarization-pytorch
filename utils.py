@@ -86,11 +86,32 @@ class FileIO:
         titles=[]
         file = open(path, 'r')
         for line in file:
-            line=json.loads(line)
-            content=line['content']
+            text=json.loads(line)
+            content=text['content']
             content=list(flatten(content))
+            content=content[0:int(len(content)*0.8)]
             contents.append(content)
-            title=line['title']
+            title=text['title']
             titles.append(title)
         file.close()
         return contents,titles
+
+
+class Utils:
+    def gpu_model_to_cpu_model(self, origin_state_dict):
+        # create new OrderedDict that does not contain `module.`
+        from collections import OrderedDict
+
+        def model_trans(state_dict):
+            new_state_dict = OrderedDict()
+            for k, v in state_dict.items():
+                name = k[7:]  # remove `module.`
+                new_state_dict[name] = v  # load params
+            return new_state_dict
+
+        if isinstance(origin_state_dict, tuple):
+            return (model_trans(state) for state in origin_state_dict)
+        elif isinstance(origin_state_dict, list):
+            return [model_trans(state) for state in origin_state_dict]
+        else:
+            return model_trans(origin_state_dict)

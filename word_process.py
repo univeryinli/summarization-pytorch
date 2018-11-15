@@ -4,6 +4,7 @@ from nltk.tokenize import RegexpTokenizer, WordPunctTokenizer
 from nltk.corpus import stopwords
 from iteration_utilities import flatten
 import sys, os, json, pickle, multiprocessing,unidecode
+from multiprocessing import Pool
 import numpy as np
 
 if os.name=='nt':
@@ -11,29 +12,24 @@ if os.name=='nt':
     warnings.filterwarnings(action='ignore', category=UserWarning, module='gensim')
 
 from gensim import corpora, models, similarities
-from gensim.models import Word2Vec
+from gensim.models import Word2Vec,TfidfModel
 from multiprocessing import Pool
 import os, time, random, gc,re
 from utils import FileIO
 
 
 class WordProcess:
-    def __init__(self, path_base, is_model_load=False):
+    def __init__(self, path_base, is_model_load=False,is_dict_load=False,works=1):
         self.path_base = path_base
-        path_model = path_base + 'title_content.models'
-        self.path_model = path_model
-        path_train = path_base + 'train_1/'
-        self.path_train = path_train
-        path_label = path_base + 'label_1/'
-        self.path_label = path_label
+        self.path_model = path_base + 'title_content.models'
+        self.path_dict =path_base+'50k.dict'
+        self.path_text = path_base +'bytecup.corpus.train.0.50k.txt'
+        self.works=works
+
         self.re_sentence=re.compile(r'[\\\,\-\?\/\!\:\;\!\.\[\]\+\=\_\"\*\^\%\#\@\&\`\(\)\{\}\']+')
         self.re_num=re.compile(r'([0-9]+)')
         self.re_char=re.compile(r'[0-9]+')
         self.re_upper=re.compile(r'([A-Z][a-z]+)')
-        self.content = []
-        self.contents = []
-        self.vector = []
-        self.vectors = []
 
         if is_model_load:
             print('model load started!')
@@ -41,6 +37,11 @@ class WordProcess:
             self.wv = model.wv
             del model
             print('model has been loaded!')
+        elif is_dict_load:
+            print('dict load started!')
+            dic=corpora.Dictionary().load(self.path_dict)
+            self.dic=dic
+            print('dict has been loaded started!')
 
     def train_vec_manager(self, trainfile):
         """operate the files of the training data
@@ -72,53 +73,7 @@ class WordProcess:
                     self.title2vectors(filename)
         print('label path manager done')
 
-    def text2tokens1(self, path, stop_list, is_return=False):
-        stop_list_new = stopwords.words() + stop_list + ["'"]
-        file = open(path)
-        file_contents = open(path[0:-3] + 'contents.txt', 'a')
-        file_titles = open(path[0:-3] + 'titles.txt', 'a')
-        file_title_content = open(path[0:-3] + 'title_contents.txt', 'a')
-        contents = []
-        titles = []
-        title_contents = []
-        for line in file:
-            line = json.loads(line)
-            ids = line['id']
-            print(ids)
-            content = line['content'].replace('\"', '"')
-            content = content.replace(u'\u2014', '-').replace(u'\u201c', '"').replace(u'\u201d', '"').replace(u'\u2013',
-                                                                                                              '-').replace(
-                u'\u2018', "'").replace(u'\u2019', "'")
-            content = content.lower()
-            paras = content.split('\n')
-            content = [
-                [[word for word in self.word_tokenizer(sentence) if word not in stop_list_new] for sentence in
-                 self.split_sentence(para)]
-                for
-                para in paras]
-            content = [[word for sentence in self.split_sentence(para) for word in self.word_tokenizer(sentence) if
-                        word not in stop_list_new] for para in paras]
-            sentences = flatten(content)
-            title = line['title']
-            title = title.lower()
-            title = self.word_tokenizer(title)
-            title_content = sentences + title
-            if is_return:
-                contents.append(content)
-                titles.append(title)
-                title_contents.append(title_content)
-            else:
-                file_contents.write(str(content))
-                file_titles.write(title)
-                file_title_content.write(title_content)
-        file_title_content.close()
-        file_titles.close()
-        file_contents.close()
-        file.close()
-        if is_return:
-            return contents, titles, title_contents
-
-    def text2tokens2(self, path,is_return=False):
+    def text2tokens(self, path,is_return=False):
         file = open(path)
         file_new = open(path[0:-3] + 'new.txt', 'a')
         file_dic = open(path[0:-3] + 'dic.txt', 'a')
@@ -154,9 +109,6 @@ class WordProcess:
                 dic_temp += words
             title_content=dic_temp + title
             dic += list(set(title_content))
-
-            # words = nltk.WordPunctTokenizer().tokenize('. How to Know If You ve Sent a Bad Twee.tA deep dive into    The Ratio ????')
-            # print(words)
 
             if is_return:
                 contents.append(sentences_temp)
@@ -247,23 +199,50 @@ class WordProcess:
         model.save(self.path_model)
         print('model_gen:done')
 
-    def cal_tfidf(self, title_contents, contents, titles):
-        dictionary = corpora.Dictionary(title_contents)
-        dictionary.save(path_base + 'bytecup.dict')  # store the dictionary, for future reference
-        corpus_con = [dictionary.doc2bow(content) for content in contents]
-        corpus_title = [dictionary.doc2bow(title) for title in titles]
-        corpora.MmCorpus.serialize(path_base + 'bytecup_content.mm', corpus_con)  # store to disk, for later use
-        corpora.MmCorpus.serialize(path_base + 'bytecup_title.mm', corpus_title)
-        corpus_con = corpora.MmCorpus(path_base + 'bytecup_content.mm')
-        corpus_title = corpora.MmCorpus(path_base + 'bytecup_title.mm')
-        tfidf = models.TfidfModel(corpus_con)
-        corpus_tfidf_con = tfidf[corpus_con]
-        corpus_tfidf_title = tfidf[corpus_title]
-        corpora.MmCorpus.serialize(path_base + 'bytecup_tfidf_con.mm', corpus_tfidf_con)
-        corpora.MmCorpus.serialize(path_base + 'bytecup_tfidf_title.mm', corpus_tfidf_title)
-        print('cal_tfidf:done!')
+    def dic_gen(self):
+        dictionary = Dictionary([['\t', '\n', 'SOS', 'STOP']])
+        f = open(self., 'r')
+        for line in f:
+            text = json.loads(line)
+            content = text['content']
+            content = list(itertools.chain.from_iterable(content))
+            title = text['title']
+            title_content = content + title
+            dictionary.add_documents([title_content])
+        dictionary.save('50k.dict')
 
-    def list_read(self,path,is_flatten=False,is_return=False):
+    def gen_new_dic(self,dict_path):
+        dic = Dictionary().load(dict_path)
+        dfs = dic.dfs
+        dfs_new = sorted(dfs.items(), key=lambda dfs: dfs[1], reverse=True)
+        dfs_new = dict(dfs_new)
+        dfs_new_keys = list(dfs_new.keys())[0:70000]
+        dic_vocab = [dic[i] for i in dfs_new_keys]
+        return dic_vocab
+
+    def cal_tfidf(self, contents,titles):
+        print('cal tfidf:start!')
+        corpus_con = [self.dic.doc2bow(content) for content in contents]
+        tfidf = TfidfModel(corpus_con)
+        contents_new=[]
+        title_contents=[['\n','\t','SOS']]
+        for content,title in zip(corpus_con,titles):
+            dic=dict(tfidf[content])
+            dic_new = dict(sorted(dic.items(), key=lambda dic: dic[1], reverse=True))
+            dic_new_index=list(dic_new.keys())[0:min(200,len(dic_new))]
+            content_new=[self.dic[index] for index in dic_new_index]
+            contents_new.append(content_new)
+            title_content=content_new+title
+            title_contents.append(title_content)
+
+        dictionary = corpora.Dictionary(title_contents)
+        dictionary.save(path_base+'part_new.dict')  # store the dictionary, for future reference
+        f=open(path_base+'content_new.txt','w')
+        f.write(str(contents_new))
+        f.close()
+        print('cal tfidf:done!')
+
+    def list_read(self,path,is_flatten=False,is_return=True):
         # Try to read a txt file and return a list.Return [] if there was a
         # mistake.
         try:
@@ -289,18 +268,6 @@ class WordProcess:
         if is_return:
             return lines
 
-    def word_generator(self,path,is_flatten=False):
-        file = open(path, 'r')
-        print('generator read:' + path + 'start!')
-        for line in file:
-            if is_flatten:
-                line = flatten(eval(line))
-            else:
-                line = eval(line)
-            yield line
-        file.close()
-        print('generator:' + path + 'done!')
-
     def vec2word(self,vec):
         vec=np.array(vec)
         word_t=[]
@@ -308,11 +275,69 @@ class WordProcess:
             word_t.append(self.wv.similar_by_vector(v)[0])
         return word_t
 
+    def gen_new_text_by_new_vocab(self,vocab):
+        f1 = open(self.path_base+'bytecup.corpus.train.0.full.txt', 'r')
+        f2 = open(self.path_base+'bytecup.corpus.train.0.50k.txt', 'a')
+        for i, line in enumerate(f1):
+            print(i)
+            text = json.loads(line)
+            content = text['content']
+            content_new = [[word if word in vocab else 'unk' for word in sen] for sen in content if 2 < len(sen) < 50]
+            content_len = len(content_new)
+            media_sen = [idx for i in range(0, content_len, max(1, int(content_len / 10))) for idx in
+                         range(i, i + min(5, max(int(content_len / 10), 1))) if idx < content_len]
+            sen_indexes = media_sen
+            content_new = [content_new[i] for i in sen_indexes]
+            text['content'] = content_new
+            text = json.dumps(text)
+            f2.write(text + '\n')
+            i += 1
+        f1.close()
+        f2.close()
+
+    def gen_new_text_by_tfidf(self):
+        f=open(self.path_text,'r')
+        tfidf=TfidfModel(dictionary=self.dic)
+        f1=open(self.path_base+'bytecup.corpus.train.0.200tfidf.txt','a')
+        for i,line in enumerate(f):
+            print(i)
+            text=json.loads(line)
+            content=text['content']
+            content=list(itertools.chain.from_iterable(content))
+            content=[word for word in content if word not in stopword]
+            content=self.dic.doc2bow(content)
+            content=tfidf[content]
+            content=dict(content)
+            content_new = sorted(content.items(), key=lambda content: content[1], reverse=True)
+            content_new_keys = list(dict(content_new).keys())[0:200]
+            content_new=[self.dic[i] for i in content_new_keys]
+            f1.write(str(content_new)+'\n')
+        f1.close()
+        f.close()
+
+    def multi_list_read(self):
+        print('Parent process %s.', os.getpid())
+        workers = self.workers
+        print('workers:', workers)
+        p = Pool(workers)
+        for i in range(workers):
+            pathread = path + prestr + str(i).zfill(2)
+            print(pathread)
+            p.apply_async(func, args)
+            print('task:', i)
+        print('Waiting for all subprocesses done...')
+        p.close()
+        p.join()
+        print('All subprocesses done.')
+
 
 if __name__ == '__main__':
     path_base = '../data/'
     text_path=path_base + 'bytecup.corpus.train.0.txt'
-    word_pro = WordProcess(path_base,is_model_load=True)
+    title_contents_path=path_base+'bytecup.corpus.train.0.title_contents.txt'
+    word_pro = WordProcess(path_base,is_model_load=False,is_dict_load=True)
+    #title_contents=word_pro.list_read(title_contents_path)
+    #dic=word_pro.dic_gen(title_contents)
     #word_pro.text2tokens2(text_path)
     #title_contents=word_pro.list_read(text_path[0:-3]+'title_contents.txt',is_return=True)
     #word_pro.model_gen(title_contents)
