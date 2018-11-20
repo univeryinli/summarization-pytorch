@@ -89,7 +89,7 @@ class FileIO:
             text=json.loads(line)
             content=text['content']
             content=list(flatten(content))
-            content=content[0:int(len(content)*0.8)]
+            content=content[0:int(len(content)*0.4)]
             contents.append(content)
             title=text['title']
             titles.append(title)
@@ -110,8 +110,8 @@ class Utils:
             return new_state_dict
 
         if isinstance(origin_state_dict, tuple):
-            return (model_trans(state) for state in origin_state_dict)
+            return tuple(model_trans(state) for state in origin_state_dict)
         elif isinstance(origin_state_dict, list):
-            return [model_trans(state) for state in origin_state_dict]
+            return list(model_trans(state) for state in origin_state_dict)
         else:
             return model_trans(origin_state_dict)

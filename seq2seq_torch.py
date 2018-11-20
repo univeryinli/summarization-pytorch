@@ -17,6 +17,7 @@ batch_size = 128
 vec_dim=256
 max_encoder_seq_length = 100
 max_decoder_seq_length=5
+path_base = '../data/'
 
 
 class Encoder1(nn.Module):
@@ -31,7 +32,6 @@ class Encoder1(nn.Module):
 
     def forward(self, encode_inputs):
         #seq_length=encode_inputs.size()[1]
-
         self.rnn.flatten_parameters()
         encode_inputs=self.embed_dropout(encode_inputs)
         encode_outputs, encode_hidden = self.rnn(encode_inputs)
@@ -254,6 +254,7 @@ class AttnDecoder3(nn.Module):
         # decode_input=self.embed_dropout(decode_input)
         decode_batch_size, decode_length ,encode_length= decode_inputs.size()[0], decode_inputs.size()[1] ,encode_outputs.size()[1]
         #attn = encode_outputs.new_zeros(decode_batch_size,decode_length,encode_length)
+        decode_outputs= decode_inputs_indexes.new_zeros(decode_inputs_indexes.size())
         loss_sum=0
         for i in range(decode_batch_size):
             batch_h0 = decode_hidden[0][i].unsqueeze(0)
@@ -307,7 +308,9 @@ class AttnDecoder3(nn.Module):
                     decode_output=(self.output_linear(attn_value)+decode_output)
 
                     decode_output = self.out(decode_output)
+                    decode_outputs[i,j+1]=decode_output.topk(1)[1].view(-1)
                     decode_output = F.log_softmax(decode_output,dim=1)
+
                     loss=F.nll_loss(decode_output,decode_inputs_indexes[i,j+1].view(-1))
                     loss_batch+=loss
                     time_steps=j+1
@@ -335,7 +338,7 @@ class AttnDecoder3(nn.Module):
                         break
             loss_batch /= time_steps
             loss_sum += loss_batch
-        return loss_sum.view(1,-1)
+        return loss_sum.view(1,-1),decode_outputs
 
     def init_hidden(self):
         result = Variable(torch.zeros(1, 1, self.hidden_size))
@@ -502,7 +505,7 @@ class HistoryLoss():
 #        plt.show()
 
 
-def train_model(encoder, decoder, dataload, criterion,scheduler,history_loss,num_epochs=20,
+def train_model(encoder, decoder, dataload, criterion,scheduler,history_loss,num_epochs=35,
                 train_steps=512, val_steps=64, val_model='loss'):
     since = time.time()
 
@@ -647,7 +650,7 @@ def train_model(encoder, decoder, dataload, criterion,scheduler,history_loss,num
                     print('model has not improving!')'''
 
         # 保存最佳模型的权重
-        torch.save(best_model_wts, './best_model_wts')
+        torch.save(best_model_wts, path_base+'50k.1.best_model_wts')
         # 保存loss相关数据
         history_loss.history['train_loss'].append(train_epoch_loss)
         history_loss.history['train_acc'].append(train_epoch_acc)
@@ -658,7 +661,7 @@ def train_model(encoder, decoder, dataload, criterion,scheduler,history_loss,num
         print('\n')
 
     # 保存loss到文件
-    history_loss.save('./loss.dict')
+    history_loss.save(path_base+'50k.1.loss')
     time_elapsed = time.time() - since
     print('Training complete in {:.0f}m {:.0f}s'.format(
         time_elapsed // 60, time_elapsed % 60))
@@ -671,16 +674,14 @@ def evaluate(encoder, decoder, datasets):
     encoder.train(False)
     decoder.train(False)
     out=[]
-    atten1=[]
     for i in range(100):
         sample=datasets[i]
-        encode_inputs, decode_inputs = Variable(sample['encode_input']), Variable(sample['decode_input'])
+        encode_inputs, decode_inputs = Variable(sample['encode_input'].unsqueeze(0).cuda()), Variable(sample['decode_input'].unsqueeze(0).cuda())
         encode_outputs, encoder_hidden, decode_inputs_vec = encoder(encode_inputs,decode_inputs)
         decode_hidden = encoder_hidden
-        decode_outputs = decoder(decode_inputs_vec, decode_inputs, decode_hidden, encode_outputs)
-        out.append(decode_outputs.numpy()[0])
-        atten1.append(atten.numpy()[0])
-    return out,atten1
+        _, decode_outputs = decoder(decode_inputs_vec, decode_inputs, decode_hidden, encode_outputs)
+        out.append(decode_outputs)
+    return out
 
 
 def test():
@@ -758,7 +759,6 @@ def predict():
     path_file = path_base + 'bytecup.corpus.train.0.50k.txt'
     fio = FileIO()
     word = WordProcess(path_base, is_model_load=False,is_dict_load=True)
-    wv = word.wv
 
     contents, titles = fio.load_from_json(path_file)
 
@@ -773,28 +773,30 @@ def predict():
 
     train_data = {'contents': contents[0:num_samples], 'titles': titles[0:num_samples]}
     test_data = {'contents': contents[num_samples:total_size], 'titles': titles[num_samples:total_size]}
-    datasets = {'train': TextData2(train_data, dic, train_len=max_encoder_seq_length, label_len=max_decoder_seq_length),
-                'val': TextData2(test_data, dic, train_len=max_encoder_seq_length, label_len=max_decoder_seq_length)}
+    datasets = {'train': TextData2(train_data, word.dic, train_len=max_encoder_seq_length, label_len=max_decoder_seq_length),
+                'val': TextData2(test_data, word.dic, train_len=max_encoder_seq_length, label_len=max_decoder_seq_length)}
     data_loads = {x: DataLoader(datasets[x], batch_size=batch_size, shuffle=True, num_workers=15) for x in
                   ['train', 'val']}
 
     encoder = Encoder3(voca_size=84031, embedd_size=128, hidden_size=256)
     decoder = AttnDecoder3(hidden_size=256, vocab_size=84031)
-    best_model=torch.load(path_base+'./50k.best_model_wts')
+    if use_cuda:
+        encoder.cuda()
+        decoder.cuda()
+    best_model=torch.load(path_base+'./50k.1.best_model_wts')
     best_model=Utils().gpu_model_to_cpu_model(best_model)
 
     encoder.load_state_dict(best_model[0])
     decoder.load_state_dict(best_model[1])
     out=evaluate(encoder,decoder,datasets)
-    file1=open(path_base+'predict','a')
-    for o in out:
-        file1.write(str(word.vec2word(o)))
+
+    file1=open(path_base+'50k.1.predict','a')
+    for i,o in enumerate(out):
+        file1.write(str([word.dic[int(i)] for i in o.data[0]]))
+        file1.write(str(test_data['titles'][i])+'\n')
     file1.close()
-    file2=open(path_base+'true','a')
-    for line in test_data['titles'][0:100]:
-        file2.write(line)
-    file2.close()
+    print('predict done!')
 
 
 if __name__ == '__main__':
-    main()
+    predict()

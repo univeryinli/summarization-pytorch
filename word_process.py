@@ -201,7 +201,7 @@ class WordProcess:
 
     def dic_gen(self):
         dictionary = Dictionary([['\t', '\n', 'SOS', 'STOP']])
-        f = open(self., 'r')
+        f = open(self.path_text, 'r')
         for line in f:
             text = json.loads(line)
             content = text['content']
